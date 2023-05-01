@@ -4,6 +4,7 @@ import random
 from tqdm import tqdm
 from itertools import combinations, permutations
 import math
+import copy
 
 from scipy.optimize import linear_sum_assignment
 import numpy as np

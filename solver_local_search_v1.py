@@ -4,7 +4,7 @@ import random
 from tqdm import tqdm
 from itertools import combinations, permutations
 import math
-
+import copy
 
 seed = random.randint(0, 999999999999999999)
 # seed = 267

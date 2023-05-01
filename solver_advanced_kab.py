@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 seed = random.randint(0, 999999999999999999)
-# seed = 771096499388344588
+# seed = 629410397156499646
 random.seed(seed)
 
 
@@ -25,13 +25,14 @@ def timer(func):
         return result
     return wrapper
 
+
 def is_corner(piece: Tuple[int, int, int, int]):
     return piece.count(0) == 2
 
 def is_side(piece: Tuple[int, int, int, int]):
     return piece.count(0) == 1
 
-def solve_local_search(eternity_puzzle):
+def solve_advanced(eternity_puzzle):
     """
     Local search solution of the problem
     :param eternity_puzzle: object describing the input
@@ -100,26 +101,27 @@ def solve_local_search(eternity_puzzle):
     internal_positions = [pos for pos in range(eternity_puzzle.board_size + 1, eternity_puzzle.n_piece - eternity_puzzle.board_size - 1) if pos % eternity_puzzle.board_size != 0 and pos % eternity_puzzle.board_size != eternity_puzzle.board_size - 1 and pos // eternity_puzzle.board_size != 0 and pos // eternity_puzzle.board_size != eternity_puzzle.board_size - 1]
     edge_positions = [pos for pos in range(1, eternity_puzzle.board_size-1)] + [pos*eternity_puzzle.board_size for pos in range(1, eternity_puzzle.board_size-1)] + [pos + eternity_puzzle.board_size*(eternity_puzzle.board_size-1) for pos in range(1, eternity_puzzle.board_size-1)] + [pos*eternity_puzzle.board_size + eternity_puzzle.board_size-1 for pos in range(1, eternity_puzzle.board_size-1)]
     corner_positions = [eternity_puzzle.board_size - 1, eternity_puzzle.n_piece - eternity_puzzle.board_size, eternity_puzzle.n_piece - 1]
-
+    border_positions = edge_positions + corner_positions
     all_positions = internal_positions + edge_positions + corner_positions
 
-    remaining_pieces = []
-    fixedCorner = None
+    corners = []
+    other_pieces = []
     for piece in eternity_puzzle.piece_list:
-        if not fixedCorner and piece.count(0) == 2:
-            fixedCorner = piece
+        if piece.count(0) == 2:
+            corners.append(piece)
         else:
-            remaining_pieces.append(piece)
+            other_pieces.append(piece)
     
     # Search among the external pieces
 
     def fullyRandomConstruction():
+        remaining_pieces = other_pieces + corners[1:]
         random.shuffle(remaining_pieces)
         cornerIndex = 0
         edgeIndex = 0
         internalIndex = 0
         board = [None] * eternity_puzzle.n_piece
-        board[0] = corner_rotation(fixedCorner, 0)
+        board[0] = corner_rotation(corners[0], 0)
         for piece in remaining_pieces:
             if is_corner(piece):
                 board[corner_positions[cornerIndex]] = corner_rotation(piece, corner_positions[cornerIndex])
@@ -132,24 +134,37 @@ def solve_local_search(eternity_puzzle):
                 internalIndex += 1
         return board
 
-    def recursiveBuild(maxTime, positions):
+    def recursiveBuild(maxTime, positions, fixedCornersPositions: List[int] = []):
         """
             General recursive function to build the board
             :param maxTime: maximum time to run the algorithm
             :param positions: list of positions to fill
             :return: a board
         """
-
-        beginTime = time.time()
-        random.shuffle(remaining_pieces)
         beginTime = time.time()
         board = [None] * eternity_puzzle.n_piece
-        board[0] = corner_rotation(fixedCorner, 0)
+
+        remaining_pieces = None
+        if fixedCornersPositions:
+            remaining_pieces = other_pieces
+            for i in range(len(fixedCornersPositions)):
+                board[fixedCornersPositions[i]] = corner_rotation(corners[i+1], fixedCornersPositions[i])
+        else:
+            remaining_pieces = other_pieces + corners[1:]
+
+        board[0] = corner_rotation(corners[0], 0)
+
+        random.shuffle(remaining_pieces)
 
         def recursion(board: List[Tuple[int, int, int, int]], posIndex: int, pieces: List[Tuple[int, int, int, int]], usedPositions: set[int]):
             if posIndex == len(positions):
                 return board
             
+            if positions[posIndex] in usedPositions:
+                result = recursion(board, posIndex+1, pieces, usedPositions)
+                if result:
+                    return result
+
             if positions[posIndex] in corner_positions:
                 for i in range(len(pieces)):
                     piece = pieces[i]
@@ -224,25 +239,30 @@ def solve_local_search(eternity_puzzle):
                             if result:
                                 return result
 
-            return None
+            return None #Proved to be non feasible
         
-        return recursion(board, 0, remaining_pieces, {0})
+        return recursion(board, 0, remaining_pieces, {0} | set(fixedCornersPositions))
     
 
     def getPieceConflicts(board: List[Tuple[int, int, int, int]], piece: Tuple[int, int, int, int], position: int, otherPositions: List[int] = []):
+        try:
+            nb_conflicts = 0
+            if piece[2] and board[position-1][3] != piece[2]:
+                nb_conflicts += 1 if position-1 not in otherPositions else 0.5
 
-        nb_conflicts = 0
-        if piece[2] and board[position-1][3] != piece[2]:
-            nb_conflicts += 1 if position-1 not in otherPositions else 0.5
+            if piece[3] and board[position+1][2] != piece[3]:
+                nb_conflicts += 1 if position+1 not in otherPositions else 0.5
 
-        if piece[3] and board[position+1][2] != piece[3]:
-            nb_conflicts += 1 if position+1 not in otherPositions else 0.5
+            if piece[1] and board[position-eternity_puzzle.board_size][0] != piece[1]:
+                nb_conflicts += 1 if position-eternity_puzzle.board_size not in otherPositions else 0.5
 
-        if piece[1] and board[position-eternity_puzzle.board_size][0] != piece[1]:
-            nb_conflicts += 1 if position-eternity_puzzle.board_size not in otherPositions else 0.5
-
-        if piece[0] and board[position+eternity_puzzle.board_size][1] != piece[0]:
-            nb_conflicts += 1 if position+eternity_puzzle.board_size not in otherPositions else 0.5
+            if piece[0] and board[position+eternity_puzzle.board_size][1] != piece[0]:
+                nb_conflicts += 1 if position+eternity_puzzle.board_size not in otherPositions else 0.5
+        except:
+            print(piece)
+            print(position)
+            print(otherPositions)
+            raise
 
         return nb_conflicts
 
@@ -292,11 +312,9 @@ def solve_local_search(eternity_puzzle):
         # print("piece", piece, "position", position, "nb_conflicts", nb_conflicts)   
         return nb_conflicts
 
-
     """
-        Low-level heuristics
+        Neighbor functions
     """
-
 
     def swapAndRotateTwoCorners(board: List[Tuple[int, int, int, int]]):
         """
@@ -387,15 +405,16 @@ def solve_local_search(eternity_puzzle):
         #     raise Exception ("c2-c1 != delta in swapAndRotateTwoInnerPieces")
         return move, delta
 
-    def swapOptimallyNonAdjacentBorderPieces(board: List[Tuple[int, int, int, int]], k: int):
+
+    def swapOptimallyNonAdjacentBorderPieces(board: List[Tuple[int, int, int, int]], k: int, diversify: bool = False):
         """"
             Select k random non-adjacent border pieces, and swap them optimally.
             Returns a list of moved pieces as tuples (rotated piece, position)
         """
         positions = set(edge_positions + corner_positions)
-        weights = {pos: 10*getPieceConflicts(board, board[pos], pos) + 1 for pos in positions}
+        if diversify: weights = {pos: getPieceConflicts(board, board[pos], pos) + 1 for pos in positions}
+        else: weights = {pos: (10*getPieceConflicts(board, board[pos], pos)) + 1 for pos in positions}
 
-        # print("[3] 1 ", eternity_puzzle.verify_solution(board))
         
         S = []
         for _ in range(k):
@@ -458,13 +477,14 @@ def solve_local_search(eternity_puzzle):
         
         return [(rotations[row_ind[i]][col_ind[i]], S[col_ind[i]]) for i in range(k)], delta
 
-    def swapOptimallyNonAdjacentInnerPieces(board: List[Tuple[int, int, int, int]], k: int):
+    def swapOptimallyNonAdjacentInnerPieces(board: List[Tuple[int, int, int, int]], k: int, diversify: bool = False):
         """"
             Select k random non-adjacent inner pieces, and swap them optimally.
             Returns a list of moved pieces as tuples (rotated piece, position)
         """
-        positions = set(internal_positions)        
-        weights = {pos: 10*getPieceConflicts(board, board[pos], pos) + 1 for pos in positions}
+        positions = set(internal_positions)
+        if diversify: weights = {pos: getPieceConflicts(board, board[pos], pos) + 1 for pos in positions}
+        else: weights = {pos: (10*getPieceConflicts(board, board[pos], pos)) + 1 for pos in positions}
 
         S = []
         for _ in range(k):
@@ -491,6 +511,7 @@ def solve_local_search(eternity_puzzle):
         for i, origin in enumerate(S):
             for j, destination in enumerate(S):
                 for rotation in eternity_puzzle.generate_rotation(board[origin]):
+
                     cost = 4-getInnerPieceConflicts(board, rotation, destination)
                     if cost > costs[i][j]:
                         costs[i,j] = cost
@@ -505,53 +526,399 @@ def solve_local_search(eternity_puzzle):
 
         return [(rotations[row_ind[i]][col_ind[i]], S[col_ind[i]]) for i in range(k)], delta
 
-    def localSearch(board: List[int], max_iterations: int, plot: bool= False) -> List[int]:
+
+    """
+        Perturbation
+    """
+    def randomPerturbation(board: List[Tuple[int, int, int, int]], k: int):
+        """
+            Select k random pieces, and rotate them randomly
+        """
+        edgesPos = []
+        edges = []
+        innerPos = []
+        inner = []
+        positions = random.sample(edge_positions + internal_positions, k)
+
+        for position in positions:
+                if is_side(board[position]):
+                    edgesPos.append(position)
+                    edges.append(board[position])
+                else:
+                    innerPos.append(position)
+                    inner.append(board[position])
+
+        random.shuffle(edgesPos)
+        random.shuffle(innerPos)
+
+        for i, position in enumerate(edgesPos):
+            board[position] = edge_rotation(edges[i], position)
+        
+        for i, position in enumerate(innerPos):
+            board[position] = random.choice(eternity_puzzle.generate_rotation(inner[i]))
+
+        return board
+    
+
+    def squarePerturbation(board: List[Tuple[int, int, int, int]], k: int):
+        """
+            Select a random square of size kxk, and rotate it randomly
+        """
+        # bottom left corner of the square
+        botLeft = random.randint(0, eternity_puzzle.board_size**2 - k - eternity_puzzle.board_size*(k-1))
+
+        edgesPos = []
+        edges = []
+        innerPos = []
+        inner = []
+        for i in range(k):
+            for j in range(k):
+                position = botLeft+i*eternity_puzzle.board_size+j
+                if is_side(board[position]):
+                    edgesPos.append(position)
+                    edges.append(board[position])
+                elif not is_corner(board[position]):
+                    innerPos.append(position)
+                    inner.append(board[position])
+
+        random.shuffle(edgesPos)
+        random.shuffle(innerPos)
+
+        for i, position in enumerate(edgesPos):
+            board[position] = edge_rotation(edges[i], position)
+        
+        for i, position in enumerate(innerPos):
+            board[position] = random.choice(eternity_puzzle.generate_rotation(inner[i]))
+
+        return board
+    
+    def randomSwapCorners(board: List[Tuple[int, int, int, int]]):
+        """
+            Select two random corners
+            Returns a list of moved pieces as tuples (rotated piece, position)
+        """
+
+        positions = copy.deepcopy(corner_positions)
+        random.shuffle(positions)
+
+        for i in range(len(corner_positions)):
+            board[positions[i]] = corner_rotation(board[corner_positions[i]], positions[i])
+
+        return board
+
+    """
+        Guiding heuristics
+    """
+
+    def isCompleteSquare(board: List[Tuple[int, int, int, int]], position, squareSide):
+        """
+            :param board: the board
+            :param position: the position of the bottom left corner of the square
+        """
+        # Bottom side
+        for i in range(squareSide-1):
+            if board[position+i][3] != board[position+i+1][2]:
+                return False
+            
+        # Right side
+        for i in range(squareSide-1):
+            if board[position+i*eternity_puzzle.board_size][0] != board[position+(i+1)*eternity_puzzle.board_size][1]:
+                return False
+        
+        # Top side
+        for i in range(squareSide-1):
+            if board[position+(squareSide-1)*eternity_puzzle.board_size+i][3] != board[position+(squareSide-1)*eternity_puzzle.board_size+i+1][2]:
+                return False
+        
+        # Left side
+        for i in range(squareSide-1):
+            if board[position+i*eternity_puzzle.board_size][0] != board[position+(i+1)*eternity_puzzle.board_size][1]:
+                return False
+        
+        # Inside
+        for i in range(1, squareSide-1):
+            for j in range(1, squareSide-1):
+                if getInnerPieceConflicts(board, board[position+i*eternity_puzzle.board_size+j], position+i*eternity_puzzle.board_size+j) != 0:
+                    return False
+        
+        return True
+
+    def evaluateAndAccept_CompleteSquares(board: List[Tuple[int, int, int, int]], move: List[Tuple[Tuple[int, int, int, int], int]], squareSide: int):
+        """
+            Evaluates the delta of the number of complete squares after a move
+        """
+
+        # print("1", eternity_puzzle.verify_solution(board))
+
+        delta = 0
+        save = []
+        squarePositions = set()
+        for _, pos in move:
+            for i in range(squareSide):
+                for j in range(squareSide):
+                    squarePosition = pos - i - j*eternity_puzzle.board_size
+                    if squarePosition > 0 and squarePosition + (squareSide - 1) + (squareSide - 1)*eternity_puzzle.board_size < eternity_puzzle.board_size**2:
+                        squarePositions.add(squarePosition)
+            save.append(board[pos])
+
+        for squarePosition in squarePositions:
+            if isCompleteSquare(board, squarePosition, squareSide):
+                delta -= 1
+        
+        for piece, pos in move:
+            board[pos] = piece
+
+
+        for squarePosition in squarePositions:
+            if isCompleteSquare(board, squarePosition, squareSide):
+                delta += 1
+
+        if delta >= 0:
+            return board, delta, True
+    
+        for i, change in enumerate(move):
+            board[change[1]] = save[i]
+
+        return board, delta, False
+
+    def surrogateSearch(board: List[int], max_iterations: int, squareSide: int) -> List[int]:
+
         totalConflicts = eternity_puzzle.get_total_n_conflict(board)
         bestBoard = copy.deepcopy(board)
         bestConflicts = totalConflicts
+
+        print(f"[ surrogateSearch ({squareSide}x{squareSide}) ] Starting with {totalConflicts} conflicts.")
+
+        totalPerfectSquares = 0
+        for i in range(eternity_puzzle.board_size - squareSide + 1):
+            for j in range(eternity_puzzle.board_size - squareSide + 1):
+                position = i + j*eternity_puzzle.board_size
+                if isCompleteSquare(board, position, squareSide):
+                    totalPerfectSquares += 1
+
+        for step in tqdm(range(max_iterations)):
+            heuristicSelection = random.randint(0, 4)
+            if heuristicSelection == 0:
+                move, conflictsDelta = swapAndRotateTwoCorners(board)
+            elif heuristicSelection == 1:
+                move, conflictsDelta = swapAndRotateTwoEdges(board)
+            elif heuristicSelection == 2:
+                move, conflictsDelta = swapAndRotateTwoInnerPieces(board)
+            elif heuristicSelection == 3:
+                move, conflictsDelta = swapOptimallyNonAdjacentBorderPieces(board, eternity_puzzle.board_size)
+            elif heuristicSelection == 4:
+                move, conflictsDelta = swapOptimallyNonAdjacentInnerPieces(board, int(eternity_puzzle.board_size*3/2))
+
+            noMove = False
+            if conflictsDelta == 0:
+                for piece, pos in move:
+                    if board[pos] == piece:
+                        noMove = True
+                        break
+                if noMove:
+                    continue
+
+            # Evaluate
+            board, perfectSquaresDelta, accepted = evaluateAndAccept_CompleteSquares(board, move, squareSide)
+
+            if accepted:
+                totalPerfectSquares += perfectSquaresDelta
+                totalConflicts += conflictsDelta
+                if totalConflicts < bestConflicts:
+                    bestConflicts = totalConflicts
+                    print(f"[ surrogateSearch ({squareSide}x{squareSide}) ]New best board with {bestConflicts} conflicts and {totalPerfectSquares} perfect  squares")
+                    bestBoard = copy.deepcopy(board)
+                    print()
+                    
+                    if bestConflicts == 0:
+                        print("Found solution in", step+1, "iterations.")
+                        return bestBoard
+                    
+        return bestBoard, bestConflicts
+
+    def localSearch(board: List[Tuple[int, int, int, int]], max_iterations: int):
         
-        if plot:
-            conflictsHistory = [480-totalConflicts]
+        totalConflicts = eternity_puzzle.get_total_n_conflict(board)
+        bestConflicts = totalConflicts
+        bestBoard = copy.deepcopy(board)
 
-        maxBeforeRestart = 5000
-        for restart in range(5):
-            lastImprovementStep = 0
-            lastImprovementPeriod = 0
-            for step in tqdm(range(max_iterations)):
-                
-                if random.randint(0, 1):
-                    move, conflictsDelta = swapOptimallyNonAdjacentBorderPieces(board, eternity_puzzle.board_size)
-                else:
-                    move, conflictsDelta = swapOptimallyNonAdjacentInnerPieces(board, int(eternity_puzzle.board_size*3/2))
+        for step in tqdm(range(max_iterations)):
+            heuristicSelection = random.randint(0, 4)
+            if heuristicSelection == 0:
+                move, conflictsDelta = swapAndRotateTwoCorners(board)
+            elif heuristicSelection == 1:
+                move, conflictsDelta = swapAndRotateTwoEdges(board)
+            elif heuristicSelection == 2:
+                move, conflictsDelta = swapAndRotateTwoInnerPieces(board)
+            elif heuristicSelection == 3:
+                move, conflictsDelta = swapOptimallyNonAdjacentBorderPieces(board, eternity_puzzle.board_size)
+            elif heuristicSelection == 4:
+                move, conflictsDelta = swapOptimallyNonAdjacentInnerPieces(board, int(eternity_puzzle.board_size*3/2))
 
-                if conflictsDelta <= 0:
-                    for piece, pos in move:
-                        board[pos] = piece
-                    totalConflicts += conflictsDelta
-                    if conflictsDelta < 0:
-                        lastImprovementPeriod = step - lastImprovementPeriod
-                        lastImprovementStep = step
-                        if totalConflicts < bestConflicts:
-                            bestBoard = copy.deepcopy(board)
-                            bestConflicts = totalConflicts
-                        print("New best board with", totalConflicts, "conflicts")
-                        print()
+            noMove = False
+            if conflictsDelta == 0:
+                for piece, pos in move:
+                    if board[pos] == piece:
+                        noMove = True
+                        break
+                if noMove:
+                    continue
 
-                if step - lastImprovementStep > maxBeforeRestart and step - lastImprovementStep > 2*lastImprovementPeriod:
-                    lastImprovementStep = 0
-                    lastImprovementPeriod = 0
-                    board = recursiveBuild(10, topToBottomScanRowPositions)
-                    totalConflicts = eternity_puzzle.get_total_n_conflict(board)
-                    break
+            if conflictsDelta <= 0:
+                totalConflicts += conflictsDelta
+                for piece, pos in move:
+                    board[pos] = piece
+                print(totalConflicts, "conflicts")
+                if totalConflicts < bestConflicts:
+                    bestConflicts = totalConflicts
+                    bestBoard = copy.deepcopy(board)
+                    print(f"[ localSearch ] New best board with {bestConflicts} conflicts")
+                    print()
+                    if bestConflicts == 0:
+                        print("Found solution in", step+1, "iterations.")
+                        return bestBoard
+                totalConflicts = eternity_puzzle.get_total_n_conflict(board)
+
+        return bestBoard
+
+    def largeSearch(board: List[Tuple[int, int, int, int]], max_iterations: int):
+        
+        conflicts = eternity_puzzle.get_total_n_conflict(board)
+        squareSide = 3
+        justGotBetter = True
+        for _ in range(10):
+            print(f"[ completeSearch ] Trying {squareSide}x{squareSide} squares")
+            board, newConflicts = surrogateSearch(board, max_iterations, squareSide)
             
-                if plot:
-                    conflictsHistory.append(480-bestConflicts)
 
-        if plot:
-            plt.plot(conflictsHistory)
-            plt.legend(["Conflicts"])
-            plt.show()
+            if newConflicts < conflicts:
+                if squareSide < eternity_puzzle.board_size:
+                    squareSide += 1
+                    justGotBetter = True
+                else:
+                    break
+            else:
+                if justGotBetter and squareSide > 3:
+                    squareSide -= 2
+                elif squareSide > 2:
+                    squareSide -= 1
+                else:
+                    squareSide = eternity_puzzle.board_size // 4
+
+                justGotBetter = False
+
+            conflicts = newConflicts
+
+        return board
     
+
+    def hyperSearch(board: List[int], max_iterations: int, getHistory: bool = False) -> List[int]:
+        totalConflicts = eternity_puzzle.get_total_n_conflict(board)
+        bestBoard = copy.deepcopy(board)
+        bestConflicts = totalConflicts
+
+        print("[ hyperSearch ] Starting with", totalConflicts, "conflicts.")
+
+        if getHistory:
+            conflictsHistory = [(0, totalConflicts)]
+        
+        squareSide = 3
+        totalPerfectSquares = 0
+        
+        for i in range(eternity_puzzle.board_size - squareSide + 1):
+            for j in range(eternity_puzzle.board_size - squareSide + 1):
+                position = i + j*eternity_puzzle.board_size
+                if isCompleteSquare(board, position, squareSide):
+                    totalPerfectSquares += 1
+
+        for step in tqdm(range(max_iterations)):
+            heuristicSelection = random.randint(0, 4)
+            if heuristicSelection == 0:
+                move, conflictsDelta = swapAndRotateTwoCorners(board)
+            elif heuristicSelection == 1:
+                move, conflictsDelta = swapAndRotateTwoEdges(board)
+            elif heuristicSelection == 2:
+                move, conflictsDelta = swapAndRotateTwoInnerPieces(board)
+            elif heuristicSelection == 3:
+                move, conflictsDelta = swapOptimallyNonAdjacentBorderPieces(board, eternity_puzzle.board_size)
+            elif heuristicSelection == 4:
+                move, conflictsDelta = swapOptimallyNonAdjacentInnerPieces(board, int(eternity_puzzle.board_size*3/2))
+
+            noMove = False
+            if conflictsDelta == 0:
+                for piece, pos in move:
+                    if board[pos] == piece:
+                        noMove = True
+                        break
+                if noMove:
+                    continue
+
+            # Evaluate
+            board, perfectSquaresDelta, accepted = evaluateAndAccept_CompleteSquares(board, move, squareSide)
+
+            if accepted:
+                totalPerfectSquares += perfectSquaresDelta
+                totalConflicts += conflictsDelta
+                if totalConflicts < bestConflicts:
+                    bestConflicts = totalConflicts
+                    print("New best board with", bestConflicts, "conflicts and", totalPerfectSquares, f"perfect {squareSide}x{squareSide} squares")
+                    bestBoard = copy.deepcopy(board)
+                    print()
+                    if getHistory:
+                        conflictsHistory.append((step+1, bestConflicts))
+                    if bestConflicts == 0:
+                        print("Found solution in", step+1, "iterations.")
+                        if getHistory:
+                            return bestBoard, conflictsHistory
+                        return bestBoard
+
+        totalConflicts = bestConflicts
+        board = copy.deepcopy(bestBoard)
+
+        for step in tqdm(range(max_iterations)):
+            heuristicSelection = random.randint(0, 4)
+            if heuristicSelection == 0:
+                move, conflictsDelta = swapAndRotateTwoCorners(board)
+            elif heuristicSelection == 1:
+                move, conflictsDelta = swapAndRotateTwoEdges(board)
+            elif heuristicSelection == 2:
+                move, conflictsDelta = swapAndRotateTwoInnerPieces(board)
+            elif heuristicSelection == 3:
+                move, conflictsDelta = swapOptimallyNonAdjacentBorderPieces(board, eternity_puzzle.board_size)
+            elif heuristicSelection == 4:
+                move, conflictsDelta = swapOptimallyNonAdjacentInnerPieces(board, int(eternity_puzzle.board_size*3/2))
+
+            noMove = False
+            if conflictsDelta == 0:
+                for piece, pos in move:
+                    if board[pos] == piece:
+                        noMove = True
+                        break
+                if noMove:
+                    continue
+
+            if conflictsDelta <= 0:
+                totalConflicts += conflictsDelta
+                for piece, pos in move:
+                    board[pos] = piece
+                print(totalConflicts, "conflicts")
+                if totalConflicts < bestConflicts:
+                    bestConflicts = totalConflicts
+                    bestBoard = copy.deepcopy(board)
+                    print("New best board with", bestConflicts, "conflicts")
+                    print()
+                    if getHistory:
+                        conflictsHistory.append((step+1, bestConflicts))
+                    if bestConflicts == 0:
+                        print("Found solution in", step+1, "iterations.")
+                        if getHistory:
+                            return bestBoard, conflictsHistory
+                        return bestBoard
+                totalConflicts = eternity_puzzle.get_total_n_conflict(board)
+
+        if getHistory:
+            return bestBoard, conflictsHistory
+
         return bestBoard
 
     print("##################")
@@ -560,36 +927,90 @@ def solve_local_search(eternity_puzzle):
     print()
 
     bottomToTopScanRowPositions = [i for i in range(1, eternity_puzzle.n_piece)] #49
-
     topToBottomScanRowPositions = [i for i in range(eternity_puzzle.n_piece-1, 0, -1)] #52
-
-    doubleScanRowPositions = [topToBottomScanRowPositions[i//2 + eternity_puzzle.n_piece//2 if i%2 else i//2] for i in range(len(topToBottomScanRowPositions))] #
-
-    spiralPositions = []
-    for k in range(eternity_puzzle.board_size//2):
-        # Top row
-        spiralPositions += [i + k*eternity_puzzle.board_size for i in range(k, eternity_puzzle.board_size-k-1)]
-        # Right column
-        spiralPositions += [eternity_puzzle.board_size-k-1 + i*eternity_puzzle.board_size for i in range(k, eternity_puzzle.board_size-k-1)]
-        # Bottom row
-        spiralPositions += [i + (eternity_puzzle.board_size-k-1)*eternity_puzzle.board_size for i in range(eternity_puzzle.board_size-k-1, k, -1)]
-        # Left column
-        spiralPositions += [k + i*eternity_puzzle.board_size for i in range(eternity_puzzle.board_size-k-1, k, -1)]
-    if eternity_puzzle.board_size % 2 == 1:
-        # Add center position for odd-sized grid
-        spiralPositions.append(eternity_puzzle.board_size//2 + (eternity_puzzle.board_size//2)*eternity_puzzle.board_size)
-    spiralPositions = spiralPositions[1:]
     
-    reverseSpiralPositions = spiralPositions[::-1]
+    bestBoard = None
+    bestConflicts = 1000000
 
-    doubleSpiralPositions = []
-    for i in range(len(spiralPositions)//2):
-        doubleSpiralPositions.append(spiralPositions[i])
-        doubleSpiralPositions.append(reverseSpiralPositions[i])
-    if len(spiralPositions) % 2:
-        doubleSpiralPositions.append(spiralPositions[len(spiralPositions)//2])
+    import itertools
+    corner_permutations = list(itertools.permutations(corner_positions))
+    initialScores = [0 for _ in range(len(corner_permutations))]
+    initialCalls = [1 for _ in range(len(corner_permutations))]
+    
+    for i in tqdm(range(len(corner_permutations))):
+        board = recursiveBuild(10, topToBottomScanRowPositions, corner_permutations[i])
+        if not board:
+            continue
 
-    bestBoard = recursiveBuild(10, topToBottomScanRowPositions)
-    bestBoard = localSearch(bestBoard, 20000)
-    bestConflicts = eternity_puzzle.get_total_n_conflict(bestBoard)
+        board = localSearch(board, 10000)
+        conflicts = eternity_puzzle.get_total_n_conflict(board)
+        initialScores[i] = conflicts
+
+        if conflicts < bestConflicts:
+            bestConflicts = conflicts
+            bestBoard = copy.deepcopy(board)
+            print("[ main ] New best board with", bestConflicts, "conflicts")
+            print()
+            if bestConflicts == 0:
+                break
+
+    
+
+    print("##################")
+
+    experiments = [0, 0.2, 0.4, 0.6, 0.8, 1]
+    
+    history = [] #Stores for each experiment the number of conflicts at each iteration
+
+
+    for experimentIndex in range(len(experiments)):
+        experimentScores = copy.deepcopy(initialScores)
+        experimentCalls = copy.deepcopy(initialCalls)
+
+        experimentBestBoard = None
+        experimentBestConflicts = 1000000
+
+        experimentHistory = []
+
+        for restartIndex in range(10):
+            if random.random() < experiments[experimentIndex]:
+                permutationIndex = max([i for i in range(len(corner_permutations))], key=lambda x: experimentCalls[x] / experimentScores[x])
+            else:
+                permutationIndex = random.randint(0, len(corner_permutations)-1)
+
+            experimentCalls[permutationIndex] += 1
+            
+            board = recursiveBuild(10, topToBottomScanRowPositions, corner_permutations[permutationIndex])
+
+            # board, bestConflicts = surrogateSearch(board, 50000, 3)
+            board = localSearch(board, 10000)
+
+            conflicts = eternity_puzzle.get_total_n_conflict(board)
+
+            experimentHistory.append(conflicts)
+
+            experimentScores[permutationIndex] += conflicts
+
+            if conflicts < experimentBestConflicts:
+                experimentBestConflicts = conflicts
+                experimentBestBoard = copy.deepcopy(board)
+                print("[ main ] New best board with", experimentBestConflicts, "conflicts")
+                print()
+                if experimentBestConflicts == 0:
+                    break
+
+        history.append(experimentHistory)
+        print(experimentScores)
+        print(experimentCalls)
+        
+        if experimentBestConflicts < bestConflicts:
+            bestConflicts = experimentBestConflicts
+            bestBoard = copy.deepcopy(experimentBestBoard)
+            print("[ main ] New best board with", bestConflicts, "conflicts")
+            print()
+            
+
+    print("##################")
+    print(history)
+
     return bestBoard, bestConflicts
